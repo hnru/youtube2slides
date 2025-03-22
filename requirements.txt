@@ -1,0 +1,5 @@
+yt-dlp>=2023.3.4
+youtube-transcript-api>=0.6.1
+opencv-python>=4.7.0
+pillow>=9.4.0
+python-pptx>=0.6.21
