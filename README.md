@@ -9,6 +9,7 @@ YouTube動画から簡単にGoogleスライドを作成するツール。特に3
 - **従来の等間隔抽出との併用**: 上記の機能を従来の時間間隔ベースの抽出と併用可能
 - **高品質画像出力**: 画像品質を最大100%まで調整可能
 - **動画品質設定**: 様々な解像度に対応する動画品質設定
+- **Whisper API連携**: OpenAIのWhisper APIを使用した高精度な音声認識に対応（NEW!）
 
 ## 特徴
 
@@ -19,12 +20,14 @@ YouTube動画から簡単にGoogleスライドを作成するツール。特に3
 - GoogleSlidesで開ける形式で保存
 - 画像を最適なサイズで表示
 - テキストの改行が少ないコンパクト表示
+- Whisper APIによる高精度な音声認識（NEW!）
 
 ## インストール方法
 
 ### 前提条件
 - Python 3.7以上
 - pip (Pythonパッケージマネージャー)
+- FFmpeg (音声処理に必要、Whisper API使用時)
 
 ### インストール手順
 
@@ -41,7 +44,24 @@ YouTube動画から簡単にGoogleスライドを作成するツール。特に3
 
 または直接必要なパッケージをインストールすることもできます：
 ```
-pip install yt-dlp youtube-transcript-api opencv-python pillow python-pptx
+pip install yt-dlp youtube-transcript-api opencv-python pillow python-pptx requests
+```
+
+### FFmpegのインストール（Whisper API使用時に必要）
+
+#### Windows:
+1. [FFmpeg公式サイト](https://ffmpeg.org/download.html)からダウンロード
+2. 解凍してbinフォルダを環境変数PATHに追加
+
+#### macOS:
+```
+brew install ffmpeg
+```
+
+#### Linux:
+```
+sudo apt update && sudo apt install ffmpeg  # Debian/Ubuntu
+sudo yum install ffmpeg  # CentOS/RHEL
 ```
 
 ## 使用方法
@@ -55,7 +75,7 @@ python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
 
 利用可能なオプション：
 ```
-usage: enhanced_youtube_slides.py [-h] [--output OUTPUT] [--format {pptx,slides}] [--interval INTERVAL] [--lang LANG] [--nocompact] [--text-threshold TEXT_THRESHOLD] [--change-threshold CHANGE_THRESHOLD] [--disable-text-split] [--disable-change-detection] url
+usage: enhanced_youtube_slides.py [-h] [--output OUTPUT] [--format {pptx,slides}] [--interval INTERVAL] [--lang LANG] [--nocompact] [--text-threshold TEXT_THRESHOLD] [--change-threshold CHANGE_THRESHOLD] [--disable-text-split] [--disable-change-detection] [--use-whisper] [--whisper-api-key WHISPER_API_KEY] [--whisper-model {tiny,base,small,medium,large-v1,large-v2,large-v3}] [--force-whisper] url
 
 YouTube チュートリアル動画からGoogleSlides用スライドを生成（拡張版）
 
@@ -84,6 +104,12 @@ optional arguments:
   --video-quality {best,high,medium,low}, -vq {best,high,medium,low}
                                 動画ダウンロード品質 (best=最高品質, high=高品質1080p, 
                                 medium=中品質720p, low=低品質480p。デフォルト: high)
+  --use-whisper                 Whisper APIを使用して高精度な音声認識を行う
+  --whisper-api-key WHISPER_API_KEY
+                                Whisper API（OpenAI API）のキー。環境変数 OPENAI_API_KEY からも取得可能
+  --whisper-model {tiny,base,small,medium,large-v1,large-v2,large-v3}
+                                使用するWhisperモデル（注: 現在のOpenAI APIではすべて内部的に同じモデルを使用）
+  --force-whisper               品質評価に関係なく、常にWhisper APIの字幕を優先して使用する
 ```
 
 ### バッチファイル（Windows）
@@ -127,12 +153,29 @@ Windowsユーザーの場合、同梱の `enhanced_run_slides_tool.bat` をダ�
    python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --video-quality best
    ```
 
+8. Whisper APIを使用して高精度な音声認識を行う場合：
+   ```
+   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY"
+   ```
+
+9. Whisper APIの結果を常に優先する場合：
+   ```
+   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY" --force-whisper
+   ```
+
 ## GoogleSlidesでの使用方法
 
 1. [Google Drive](https://drive.google.com/)にアクセスしてログイン
 2. 「新規」→「ファイルをアップロード」から生成された `_googleslides.pptx` ファイルをアップロード
 3. アップロードしたファイルを右クリックして「アプリで開く」→「Googleスライド」を選択
 4. Googleスライドが開いたら「ファイル」→「名前を付けて保存」でGoogleスライド形式として保存
+
+## Whisper API 使用時の注意点
+
+1. **APIキーの入手**: OpenAIのアカウントを作成し、APIキーを取得してください。
+2. **コスト管理**: Whisper APIは使用量に応じて課金されます。特に長い動画では注意が必要です。
+3. **モデル選択**: 現在のOpenAI APIでは、APIリクエスト時にはすべてのモデルサイズが内部的に同じエンドポイントを使用します。
+4. **優先モード**: `--force-whisper`オプションを使用すると、品質評価に関わらず常にWhisper APIの結果を使用します。
 
 ## トラブルシューティング
 
@@ -141,11 +184,14 @@ Windowsユーザーの場合、同梱の `enhanced_run_slides_tool.bat` をダ�
 - **スライドのレイアウトが崩れる**：GoogleSlidesでのインポート後、手動で調整が必要な場合があります。
 - **画面変化検出がうまく機能しない**：`--change-threshold` の値を調整してみてください。値を小さくするとより敏感になります。
 - **スライドが多すぎる**：文字量閾値を大きくするか、`--disable-text-split` や `--disable-change-detection` を使って一部の分割機能を無効にしてみてください。
+- **Whisper APIエラー**：APIキーが正しいか確認してください。また、環境変数 `OPENAI_API_KEY` を設定することでもAPIキーを提供できます。
+- **FFmpegエラー**：Whisper API使用時にはFFmpegが必要です。インストールされていることを確認してください。
 
 ## パラメータ調整のヒント
 
 - **text-threshold**: 一般的なチュートリアル動画では200〜300文字程度が適切です。速いペースで解説が進む動画では値を大きく、ゆっくり解説している動画では小さくすると良いでしょう。
 - **change-threshold**: デフォルト値の0.6は中程度の感度です。3Dモデリングなど視覚的な変化が多い動画では0.7〜0.8に、画面の変化が少ない講義形式の動画では0.4〜0.5に調整するのがおすすめです。
+- **whisper-model**: 現在のOpenAI APIではモデルサイズによる違いはありませんが、UIの互換性のために選択肢を提供しています。
 
 ## 開発者向け情報
 
@@ -156,6 +202,7 @@ Windowsユーザーの場合、同梱の `enhanced_run_slides_tool.bat` をダ�
 - **opencv-python**: 動画からのフレーム抽出と画像解析
 - **pillow**: 画像処理
 - **python-pptx**: PowerPoint形式のファイル生成
+- **requests**: Whisper APIとの通信
 
 ## ライセンス
 

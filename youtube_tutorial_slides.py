@@ -6,6 +6,7 @@ PowerPointのスライドに変換します。
 """
 
 import argparse
+import os
 
 from enhanced_youtube_extractor import EnhancedYouTubeTutorialExtractor
 
@@ -45,6 +46,22 @@ def main():
         "--no-thumbnail", action="store_true",
         help="最初のスライドにYouTubeサムネイルを追加しない")
     
+    # Whisper API 関連のパラメータ
+    parser.add_argument(
+        "--use-whisper", action="store_true",
+        help="Whisper APIを使用して高精度な音声認識を行う")
+    parser.add_argument(
+        "--whisper-api-key", 
+        help="Whisper API（OpenAI API）のキー。環境変数 OPENAI_API_KEY からも取得可能")
+    parser.add_argument(
+        "--whisper-model", 
+        choices=["tiny", "base", "small", "medium", "large-v1", "large-v2", "large-v3"], 
+        default="medium",
+        help="使用するWhisperモデル（注: 現在のOpenAI APIではすべて内部的に同じモデルを使用します）")
+    parser.add_argument(
+        "--force-whisper", action="store_true",
+        help="品質評価に関係なく、常にWhisper APIの字幕を優先して使用します")
+    
     args = parser.parse_args()
     
     # 文字量閾値の調整（無効化オプションが指定されていれば最大値に設定）
@@ -62,6 +79,17 @@ def main():
     }
     video_format = video_format_map.get(args.video_quality, video_format_map["high"])
     
+    # Whisper APIキーの取得（コマンドライン引数 > 環境変数）
+    whisper_api_key = args.whisper_api_key
+    if args.use_whisper and not whisper_api_key:
+        whisper_api_key = os.environ.get('OPENAI_API_KEY')
+        if not whisper_api_key:
+            print("警告: Whisper APIが有効ですが、APIキーが設定されていません。")
+            print("--whisper-api-key オプションまたは環境変数 OPENAI_API_KEY を設定してください。")
+            print("Whisper APIを使用せずに処理を続行します。")
+            args.use_whisper = False
+            args.force_whisper = False
+    
     extractor = EnhancedYouTubeTutorialExtractor(
         url=args.url,
         output_dir=args.output,
@@ -73,7 +101,11 @@ def main():
         screen_change_threshold=change_threshold,
         image_quality=args.image_quality,
         video_format=video_format,
-        add_thumbnail=not args.no_thumbnail
+        add_thumbnail=not args.no_thumbnail,
+        use_whisper=args.use_whisper,
+        whisper_api_key=whisper_api_key,
+        whisper_model=args.whisper_model,
+        force_whisper=args.force_whisper
     )
     
     result_path = extractor.process()
