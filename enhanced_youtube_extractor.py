@@ -1,35 +1,53 @@
+"""YouTube動画からキャプチャとテキストを抽出するモジュール。
+
+このモジュールはYouTube動画から定期的に画像をキャプチャし、
+対応する字幕とともにスライドに変換します。
+"""
+
 import os
-import cv2
-import argparse
-import time
-import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi
-from PIL import Image
-import numpy as np
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.dml.color import RGBColor
 import re
+import time
 from datetime import datetime
 
+import cv2
+import numpy as np
+import yt_dlp
+from PIL import Image
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.util import Inches, Pt
+from youtube_transcript_api import YouTubeTranscriptApi
+
+
 class EnhancedYouTubeTutorialExtractor:
-    def __init__(self, url, output_dir="output", interval=30, lang="ja", format_type="pptx", 
-                 compact_text=True, max_text_length=200, screen_change_threshold=0.6, 
-                 image_quality=95, video_format="bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]"):
-        """
-        YouTubeチュートリアル動画から画像とテキストを抽出し、スライドファイルを生成する拡張クラス
-        
+    """YouTubeチュートリアル動画から画像とテキストを抽出し、スライドを生成するクラス。"""
+
+    def __init__(
+            self,
+            url,
+            output_dir="output",
+            interval=30,
+            lang="ja",
+            format_type="pptx",
+            compact_text=True,
+            max_text_length=200,
+            screen_change_threshold=0.6,
+            image_quality=95,
+            video_format="bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
+            add_thumbnail=True):
+        """初期化メソッド。
+
         Args:
-            url (str): YouTube動画のURL
-            output_dir (str): 出力ディレクトリ
-            interval (int): フレーム抽出間隔（秒）
-            lang (str): 字幕の言語コード
-            format_type (str): 出力形式 ("pptx" または "slides")
-            compact_text (bool): テキストを改行せずにコンパクトに表示するか
-            max_text_length (int): スライド分割の文字数閾値
-            screen_change_threshold (float): 画面変化の検出閾値 (0-1の間, 高いほど敏感)
-            image_quality (int): 画像の品質 (1-100, 高いほど高品質)
-            video_format (str): ダウンロードする動画の形式とクオリティ
+            url: YouTube動画のURL
+            output_dir: 出力ディレクトリ
+            interval: フレーム抽出間隔（秒）
+            lang: 字幕の言語コード
+            format_type: 出力形式 ("pptx" または "slides")
+            compact_text: テキストを改行せずにコンパクトに表示するか
+            max_text_length: スライド分割の文字数閾値
+            screen_change_threshold: 画面変化の検出閾値 (0-1の間, 高いほど敏感)
+            image_quality: 画像の品質 (1-100, 高いほど高品質)
+            video_format: ダウンロードする動画の形式とクオリティ
         """
         self.url = url
         self.output_dir = output_dir
@@ -41,6 +59,7 @@ class EnhancedYouTubeTutorialExtractor:
         self.screen_change_threshold = screen_change_threshold
         self.image_quality = image_quality
         self.video_format = video_format
+        self.add_thumbnail = add_thumbnail
         self.video_id = self._extract_video_id()
         self.temp_dir = os.path.join(output_dir, "temp")
         
@@ -49,7 +68,14 @@ class EnhancedYouTubeTutorialExtractor:
         os.makedirs(self.temp_dir, exist_ok=True)
         
     def _extract_video_id(self):
-        """YouTubeのURLからビデオIDを抽出"""
+        """YouTubeのURLからビデオIDを抽出する。
+
+        Returns:
+            str: YouTube動画のID
+            
+        Raises:
+            ValueError: URLが無効な場合
+        """
         if "youtu.be" in self.url:
             video_id = self.url.split("/")[-1]
             if "?" in video_id:
@@ -65,7 +91,11 @@ class EnhancedYouTubeTutorialExtractor:
             raise ValueError("無効なYouTube URLです")
     
     def get_video_info(self):
-        """動画のタイトルと説明を取得（yt-dlpライブラリを使用）"""
+        """動画のタイトルと説明を取得する。
+
+        Returns:
+            dict: 動画のメタデータを含む辞書
+        """
         try:
             # yt-dlpの設定オプション
             ydl_opts = {
@@ -83,6 +113,64 @@ class EnhancedYouTubeTutorialExtractor:
             author = info.get('uploader', '不明な作成者')
             description = info.get('description', '')
             length = info.get('duration', 0)
+            
+            # サムネイル画像のURLを取得
+            thumbnails = info.get('thumbnails', [])
+            thumbnail_url = None
+            # 利用可能な最高品質のサムネイルを探す
+            if thumbnails:
+                # 解像度で並べ替え（高解像度のものを優先）
+                sorted_thumbnails = sorted(
+                    [t for t in thumbnails if 'width' in t and 'height' in t],
+                    key=lambda x: x.get('width', 0) * x.get('height', 0),
+                    reverse=True
+                )
+                if sorted_thumbnails:
+                    thumbnail_url = sorted_thumbnails[0].get('url')
+            
+            # サムネイルのダウンロード
+            thumbnail_path = None
+            if thumbnail_url:
+                try:
+                    import requests
+                    from PIL import Image
+                    import io
+                    
+                    # まずメモリにダウンロード
+                    response = requests.get(thumbnail_url, stream=True)
+                    if response.status_code == 200:
+                        # 一時的なWebPファイル
+                        temp_thumbnail = os.path.join(self.temp_dir, f"{self.video_id}_thumbnail_temp")
+                        with open(temp_thumbnail, 'wb') as f:
+                            for chunk in response.iter_content(1024):
+                                f.write(chunk)
+                        
+                        # PILを使って画像を開き、JPG形式で保存（PowerPoint互換）
+                        thumbnail_path = os.path.join(self.temp_dir, f"{self.video_id}_thumbnail.jpg")
+                        try:
+                            img = Image.open(temp_thumbnail)
+                            # RGBAの場合はRGBに変換（透過部分は白に）
+                            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                                background = Image.new('RGB', img.size, (255, 255, 255))
+                                background.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
+                                background.save(thumbnail_path, 'JPEG', quality=95)
+                            else:
+                                img.convert('RGB').save(thumbnail_path, 'JPEG', quality=95)
+                            
+                            # 一時ファイルを削除
+                            if os.path.exists(temp_thumbnail):
+                                os.remove(temp_thumbnail)
+                        except Exception as e:
+                            print(f"サムネイル画像の変換に失敗しました: {e}")
+                            if os.path.exists(temp_thumbnail):
+                                os.remove(temp_thumbnail)
+                            thumbnail_path = None
+                    else:
+                        print(f"サムネイル取得エラー: HTTPステータス {response.status_code}")
+                        thumbnail_path = None
+                except Exception as e:
+                    print(f"サムネイルのダウンロードに失敗しました: {e}")
+                    thumbnail_path = None
             
             # 公開日の処理
             upload_date = info.get('upload_date')
@@ -102,7 +190,8 @@ class EnhancedYouTubeTutorialExtractor:
                 "author": author,
                 "description": description,
                 "length": length,
-                "publish_date": publish_date
+                "publish_date": publish_date,
+                "thumbnail_path": thumbnail_path
             }
         except Exception as e:
             print(f"動画情報の取得に失敗しました: {e}")
@@ -112,11 +201,16 @@ class EnhancedYouTubeTutorialExtractor:
                 "author": "不明",
                 "description": "",
                 "length": 0,
-                "publish_date": None
+                "publish_date": None,
+                "thumbnail_path": None
             }
     
     def download_transcript(self):
-        """字幕をダウンロード"""
+        """字幕をダウンロードする。
+
+        Returns:
+            list: 字幕データのリスト
+        """
         try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(self.video_id)
             
@@ -170,7 +264,15 @@ class EnhancedYouTubeTutorialExtractor:
             return []
     
     def compute_frame_similarity(self, frame1, frame2):
-        """2つのフレーム間の類似度を計算する (0-1, 1が完全一致)"""
+        """2つのフレーム間の類似度を計算する。
+
+        Args:
+            frame1: 比較元のフレーム
+            frame2: 比較先のフレーム
+            
+        Returns:
+            float: 類似度 (0-1, 1が完全一致)
+        """
         try:
             # リサイズして計算を高速化
             small1 = cv2.resize(frame1, (64, 36))
@@ -190,18 +292,17 @@ class EnhancedYouTubeTutorialExtractor:
             # ヒストグラム類似度（コサイン距離）
             similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
             
-            # 構造的類似度（SSIM）も考慮したい場合はこちらを使用
-            # from skimage.metrics import structural_similarity as ssim
-            # ssim_score = ssim(gray1, gray2)
-            # similarity = (similarity + ssim_score) / 2
-            
             return max(0, min(1, similarity))  # 0-1の範囲に収める
         except Exception as e:
             print(f"類似度計算エラー: {e}")
             return 1.0  # エラーの場合は変化なしとする
     
     def extract_frames_advanced(self):
-        """動画からフレームを抽出し、インターバル、テキスト量、画面変化に基づいてフレームを選別"""
+        """動画からフレームを抽出し、インターバル、テキスト量、画面変化に基づいてフレームを選別する。
+
+        Returns:
+            tuple: (フレームパスのリスト, フレーム時間のリスト, 対応するテキストのリスト)
+        """
         try:
             print("動画をダウンロード中...")
             video_path = os.path.join(self.temp_dir, f"{self.video_id}.mp4")
@@ -251,7 +352,6 @@ class EnhancedYouTubeTutorialExtractor:
                 # 画面変化検出（最初のフレーム以外）
                 if prev_frame is not None:
                     similarity = self.compute_frame_similarity(prev_frame, frame)
-                    # print(f"時間: {sec}秒, 類似度: {similarity:.2f}")
                     
                     # 類似度が閾値より低い（= 変化が大きい）場合はフレームを追加
                     if similarity < self.screen_change_threshold:
@@ -293,7 +393,8 @@ class EnhancedYouTubeTutorialExtractor:
                 current_time = sec
                 if transcript and text and len(text) > self.max_text_length:
                     # テキスト量が多い場合、セグメントを分割して追加のフレームを作成
-                    segments = self._split_text_by_amount(transcript, current_time, current_time + self.interval)
+                    segments = self._split_text_by_amount(
+                        transcript, current_time, current_time + self.interval)
                     
                     for seg_time in segments[1:]:  # 最初のセグメントは既に追加済み
                         # フレームを取得
@@ -313,7 +414,8 @@ class EnhancedYouTubeTutorialExtractor:
                             frame_times.append(seg_time)
                             
                             # テキスト取得
-                            seg_text = self._get_transcript_at_time(transcript, seg_time, window_size=15)
+                            seg_text = self._get_transcript_at_time(
+                                transcript, seg_time, window_size=15)
                             transcript_chunks.append(seg_text)
                             
                             # デバッグ出力
@@ -340,7 +442,16 @@ class EnhancedYouTubeTutorialExtractor:
             return [], [], []
     
     def _split_text_by_amount(self, transcript, start_time, end_time):
-        """指定時間範囲内の字幕を文字量に基づいて分割し、分割点の時間を返す"""
+        """指定時間範囲内の字幕を文字量に基づいて分割し、分割点の時間を返す。
+
+        Args:
+            transcript: 字幕データ
+            start_time: 開始時間（秒）
+            end_time: 終了時間（秒）
+            
+        Returns:
+            list: 分割点の時間リスト
+        """
         if not transcript:
             return [start_time]
             
@@ -373,12 +484,15 @@ class EnhancedYouTubeTutorialExtractor:
         return split_points
     
     def _get_transcript_at_time(self, transcript, time_sec, window_size=30):
-        """
-        指定された時間付近の字幕テキストを取得
+        """指定された時間付近の字幕テキストを取得する。
+
         Args:
             transcript: 字幕データ
             time_sec: 検索する時間（秒）
             window_size: 検索する時間範囲（秒）
+            
+        Returns:
+            str: テキスト
         """
         if not transcript:
             return ""
@@ -411,101 +525,128 @@ class EnhancedYouTubeTutorialExtractor:
         return " ".join(relevant_parts) if self.compact_text else "\n".join(relevant_parts)
     
     def create_google_slides(self, frames_data, video_info):
-        """GoogleSlides用プレゼンテーション（PPTX形式）を作成"""
+        """GoogleSlides用プレゼンテーション（PPTX形式）を作成する。
+
+        Args:
+            frames_data: フレームデータのタプル (フレームパス, 時間, テキスト)
+            video_info: 動画情報の辞書
+            
+        Returns:
+            str: 作成したPPTXファイルのパス
+        """
         try:
             frames, frame_times, transcript_chunks = frames_data
             
             prs = Presentation()
             
-            # タイトルスライド（GoogleSlides互換レイアウト）
-            title_slide = prs.slides.add_slide(prs.slide_layouts[0])  # タイトルスライド
+            # タイトルスライド - 空白レイアウトを使用して完全に手動で構成
+            title_slide = prs.slides.add_slide(prs.slide_layouts[6])  # 空白レイアウト
             
-            # タイトルを設定（プレースホルダがあれば使用）
-            try:
-                title_placeholder = title_slide.shapes.title
-                title_placeholder.text = video_info["title"]
-                for paragraph in title_placeholder.text_frame.paragraphs:
-                    paragraph.font.size = Pt(32)
-                    paragraph.font.bold = True
-                    paragraph.alignment = 1  # 中央揃え
-            except:
-                # プレースホルダがなければテキストボックスで追加
-                left = Inches(0.5)
-                top = Inches(1.0)
-                width = prs.slide_width - Inches(1.0)
-                height = Inches(1.0)
-                
-                title_box = title_slide.shapes.add_textbox(left, top, width, height)
-                tf = title_box.text_frame
-                p = tf.add_paragraph()
-                p.text = video_info["title"]
-                p.font.size = Pt(32)
-                p.font.bold = True
-                p.alignment = 1  # 中央揃え
+            # サムネイル画像の追加（利用可能かつオプションが有効な場合）
+            thumbnail_height = 0
+            if self.add_thumbnail and video_info.get("thumbnail_path") and os.path.exists(video_info["thumbnail_path"]):
+                try:
+                    # サムネイルをタイトルスライドの上部に追加
+                    thumbnail_width = prs.slide_width * 0.6  # スライド幅の60%
+                    thumbnail_top = Inches(0.5)
+                    thumbnail_left = (prs.slide_width - thumbnail_width) / 2  # 中央揃え
+                    
+                    # サムネイルの高さを計算
+                    img = Image.open(video_info["thumbnail_path"])
+                    img_width, img_height = img.size
+                    aspect_ratio = img_height / img_width
+                    thumbnail_height = thumbnail_width * aspect_ratio
+                    
+                    # サムネイルを追加
+                    thumbnail = title_slide.shapes.add_picture(
+                        video_info["thumbnail_path"], 
+                        thumbnail_left, 
+                        thumbnail_top, 
+                        width=thumbnail_width
+                    )
+                    print(f"サムネイル画像を追加しました")
+                except Exception as e:
+                    print(f"サムネイル画像の追加に失敗しました: {e}")
+                    thumbnail_height = 0
             
-            # サブタイトルを設定（プレースホルダがあれば使用）
-            try:
-                subtitle_placeholder = title_slide.placeholders[1]
-                subtitle_placeholder.text = f"作成者: {video_info['author']}\n抽出日: {datetime.now().strftime('%Y-%m-%d')}"
-                for paragraph in subtitle_placeholder.text_frame.paragraphs:
-                    paragraph.font.size = Pt(18)
-            except:
-                # プレースホルダがなければテキストボックスで追加
-                left = Inches(0.5)
-                top = Inches(2.5)
-                width = prs.slide_width - Inches(1.0)
-                height = Inches(1.0)
-                
-                subtitle_box = title_slide.shapes.add_textbox(left, top, width, height)
-                tf = subtitle_box.text_frame
-                p = tf.add_paragraph()
-                p.text = f"作成者: {video_info['author']}"
-                p.font.size = Pt(18)
-                
-                p = tf.add_paragraph()
-                p.text = f"抽出日: {datetime.now().strftime('%Y-%m-%d')}"
-                p.font.size = Pt(18)
-            
-            # 目次スライド
-            toc_slide = prs.slides.add_slide(prs.slide_layouts[1])  # タイトルと内容レイアウト
-            
-            # 目次タイトルの設定
-            try:
-                title_placeholder = toc_slide.shapes.title
-                title_placeholder.text = "目次"
-                for paragraph in title_placeholder.text_frame.paragraphs:
-                    paragraph.font.size = Pt(28)
-                    paragraph.font.bold = True
-            except Exception as e:
-                print(f"目次タイトル設定エラー: {e}")
-                # プレースホルダがなければテキストボックスで追加
-                title_box = toc_slide.shapes.add_textbox(Inches(0.5), Inches(0.5), Inches(9), Inches(0.5))
-                tf = title_box.text_frame
-                tf.text = ""  # 空のテキスト設定で改行を防止
-                p = tf.paragraphs[0]
-                p.text = "目次"
-                p.font.size = Pt(28)
-                p.font.bold = True
-            
-            # 目次テキストを追加
+            # タイトルをテキストボックスとして追加
+            title_top = Inches(0.5) + thumbnail_height + Inches(0.3)  # サムネイルの下に配置
             left = Inches(0.5)
-            top = Inches(1.5)
             width = prs.slide_width - Inches(1.0)
+            height = Inches(1.0)
+            
+            title_box = title_slide.shapes.add_textbox(left, title_top, width, height)
+            tf = title_box.text_frame
+            p = tf.add_paragraph()
+            p.text = video_info["title"]
+            p.font.size = Pt(32)
+            p.font.bold = True
+            p.alignment = 1  # 中央揃え
+            
+            # サブタイトルをテキストボックスとして追加
+            subtitle_top = title_top + Inches(1.0)  # タイトルの下に配置
+            subtitle_box = title_slide.shapes.add_textbox(left, subtitle_top, width, height)
+            tf = subtitle_box.text_frame
+            p = tf.add_paragraph()
+            p.text = f"作成者: {video_info['author']}"
+            p.font.size = Pt(18)
+            p.alignment = 1  # 中央揃え
+            
+            p = tf.add_paragraph()
+            p.text = f"抽出日: {datetime.now().strftime('%Y-%m-%d')}"
+            p.font.size = Pt(18)
+            p.alignment = 1  # 中央揃え
+            
+            # YouTube URL
+            url_top = subtitle_top + Inches(0.8)
+            url_box = title_slide.shapes.add_textbox(left, url_top, width, Inches(0.5))
+            tf = url_box.text_frame
+            p = tf.add_paragraph()
+            run = p.add_run()
+            run.text = "元の動画を見る"
+            run.font.size = Pt(14)
+            run.font.color.rgb = RGBColor(0, 0, 255)
+            run.hyperlink.address = self.url
+            p.alignment = 1  # 中央揃え
+            
+            # 目次スライド - 空白レイアウトを使用して完全に手動で構成
+            toc_slide = prs.slides.add_slide(prs.slide_layouts[6])  # 空白レイアウト
+            
+            # 目次タイトルをテキストボックスとして追加
+            left = Inches(0.5)
+            top = Inches(0.5)
+            width = prs.slide_width - Inches(1.0)
+            height = Inches(0.6)
+            
+            title_box = toc_slide.shapes.add_textbox(left, top, width, height)
+            tf = title_box.text_frame
+            p = tf.add_paragraph()
+            p.text = "目次"
+            p.font.size = Pt(28)
+            p.font.bold = True
+            p.alignment = 1  # 中央揃え
+            
+            # 目次リストをテキストボックスとして追加
+            left = Inches(1.0)
+            top = Inches(1.5)
+            width = prs.slide_width - Inches(2.0)
             height = Inches(5.0)
             
-            txBox = toc_slide.shapes.add_textbox(left, top, width, height)
-            tf = txBox.text_frame
+            list_box = toc_slide.shapes.add_textbox(left, top, width, height)
+            tf = list_box.text_frame
             tf.word_wrap = True
             
-            # 既存の段落を使用して改行の追加を防止
-            tf.text = ""
-            p = tf.paragraphs[0]
-            
-            # 最初の目次項目を追加
+            # 目次項目を追加
             if frame_times and len(frame_times) > 0:
+                # 最初の目次項目
                 timestamp = time.strftime('%H:%M:%S', time.gmtime(frame_times[0]))
                 preview = transcript_chunks[0][:30] + "..." if transcript_chunks[0] and len(transcript_chunks[0]) > 30 else transcript_chunks[0] or "..."
+                
+                p = tf.add_paragraph()
                 p.text = f"1. [{timestamp}] {preview}"
+                p.font.size = Pt(14)
+                # 左インデント
+                p.level = 0
                 
                 # 残りの目次項目を追加
                 for i in range(1, len(frame_times)):
@@ -514,11 +655,17 @@ class EnhancedYouTubeTutorialExtractor:
                     
                     p = tf.add_paragraph()
                     p.text = f"{i+1}. [{timestamp}] {preview}"
+                    p.font.size = Pt(14)
+                    # 左インデント
+                    p.level = 0
             else:
+                p = tf.add_paragraph()
                 p.text = "目次項目はありません"
+                p.font.size = Pt(14)
             
-            # コンテンツスライド - 単純化したレイアウトを使用
-            for i, (frame_path, frame_time, transcript_text) in enumerate(zip(frames, frame_times, transcript_chunks)):
+            # コンテンツスライド - 空白レイアウトを使用
+            for i, (frame_path, frame_time, transcript_text) in enumerate(
+                    zip(frames, frame_times, transcript_chunks)):
                 # 空白のスライドを追加
                 slide = prs.slides.add_slide(prs.slide_layouts[6])  # 空白レイアウト
                 timestamp = time.strftime('%H:%M:%S', time.gmtime(frame_time))
@@ -531,14 +678,14 @@ class EnhancedYouTubeTutorialExtractor:
                 
                 title_box = slide.shapes.add_textbox(left, top, width, height)
                 tf = title_box.text_frame
-                # テキストフレームのプロパティを直接設定し、改行を防止
-                tf.text = ""
-                p = tf.paragraphs[0]  # 最初の段落を使用
+                p = tf.add_paragraph()
                 p.text = f"セクション {i+1} - {timestamp}"
                 p.font.size = Pt(20)
                 p.font.bold = True
+                p.alignment = 1  # 中央揃え
                 
                 # フレーム画像（スライドの80%のサイズ）
+                img_height = Inches(3.0)  # デフォルト値
                 if os.path.exists(frame_path):
                     try:
                         # スライドのサイズを取得
@@ -586,10 +733,8 @@ class EnhancedYouTubeTutorialExtractor:
                         img_height = pic.height
                     except Exception as e:
                         print(f"画像の追加に失敗しました: {e}")
-                        img_height = Inches(3.0)  # デフォルト値
-                else:
-                    img_height = Inches(3.0)  # 画像がない場合のデフォルト値
-                
+                        # img_heightはデフォルト値のままにする
+                        
                 # トランスクリプトテキスト（画像の後ろにかからないように下部に配置）
                 if transcript_text:
                     left = Inches(0.5)
@@ -629,7 +774,11 @@ class EnhancedYouTubeTutorialExtractor:
             return None
     
     def process(self):
-        """メイン処理"""
+        """メイン処理を実行する。
+
+        Returns:
+            str: 作成したファイルのパス、または失敗時はNone
+        """
         print(f"YouTube URL: {self.url}の処理を開始します")
         
         # 動画情報を取得
