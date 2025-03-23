@@ -70,12 +70,12 @@ sudo yum install ffmpeg  # CentOS/RHEL
 
 基本的な使い方：
 ```
-python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
+python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 利用可能なオプション：
 ```
-usage: enhanced_youtube_slides.py [-h] [--output OUTPUT] [--format {pptx,slides}] [--interval INTERVAL] [--lang LANG] [--nocompact] [--text-threshold TEXT_THRESHOLD] [--change-threshold CHANGE_THRESHOLD] [--disable-text-split] [--disable-change-detection] [--use-whisper] [--whisper-api-key WHISPER_API_KEY] [--whisper-model {tiny,base,small,medium,large-v1,large-v2,large-v3}] [--force-whisper] url
+usage: youtube_tutorial_slides.py [-h] [--output OUTPUT] [--format {pptx,slides}] [--interval INTERVAL] [--lang LANG] [--nocompact] [--text-threshold TEXT_THRESHOLD] [--change-threshold CHANGE_THRESHOLD] [--disable-text-split] [--disable-change-detection] [--use-whisper] [--whisper-api-key WHISPER_API_KEY] [--whisper-model {tiny,base,small,medium,large-v1,large-v2,large-v3}] [--force-whisper] url
 
 YouTube チュートリアル動画からGoogleSlides用スライドを生成（拡張版）
 
@@ -120,47 +120,47 @@ Windowsユーザーの場合、同梱の `enhanced_run_slides_tool.bat` をダ�
 
 1. 60秒間隔でスクリーンショットを取得する場合：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --interval 60
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --interval 60
    ```
 
 2. 英語の字幕を使用する場合：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --lang en
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --lang en
    ```
 
 3. 字幕量300文字ごとにスライドを分割する場合：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --text-threshold 300
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --text-threshold 300
    ```
 
 4. 画面変化検出の感度を高くする場合（0.4に設定）：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --change-threshold 0.4
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --change-threshold 0.4
    ```
 
 5. 画面変化検出のみを使用する場合（文字量による分割を無効化）：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --disable-text-split
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --disable-text-split
    ```
 
 6. 画像品質を最高に設定する場合：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --image-quality 100
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --image-quality 100
    ```
 
 7. 動画の最高品質を使用する場合：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --video-quality best
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --video-quality best
    ```
 
 8. Whisper APIを使用して高精度な音声認識を行う場合：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY"
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY"
    ```
 
 9. Whisper APIの結果を常に優先する場合：
    ```
-   python enhanced_youtube_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY" --force-whisper
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY" --force-whisper
    ```
 
 ## GoogleSlidesでの使用方法
