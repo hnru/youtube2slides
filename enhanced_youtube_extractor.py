@@ -390,9 +390,10 @@ class EnhancedYouTubeTutorialExtractor:
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             duration = total_frames / fps
             
-            frames = []
-            frame_times = []
-            transcript_chunks = []
+            # フレーム情報を記録するための辞書
+            # キー: 時間（秒）、値: (フレームパス, テキスト)
+            # 辞書を使用することで同一時間のフレームの重複を自動的に排除
+            frame_dict = {}
             
             # 最初のフレームを取得
             prev_frame = None
@@ -420,40 +421,46 @@ class EnhancedYouTubeTutorialExtractor:
                         img_params = [cv2.IMWRITE_JPEG_QUALITY, self.image_quality]
                         cv2.imwrite(img_path, frame, img_params)
                         
-                        # フレーム情報を追加
-                        frames.append(img_path)
-                        frame_times.append(sec)
-                        
                         # テキスト取得
                         text = self._get_transcript_at_time(transcript, sec, window_size=15)
-                        transcript_chunks.append(text)
                         
-                        # デバッグ出力
-                        print(f"画面変化検出: {sec}秒 (類似度: {similarity:.2f})")
+                        # フレーム情報を辞書に追加（重複を避けるため）
+                        if sec not in frame_dict:
+                            frame_dict[sec] = (img_path, text)
+                            print(f"画面変化検出: {sec}秒 (類似度: {similarity:.2f})")
                 
                 # 定期的なインターバルでのフレーム保存（高品質）
-                timestamp = time.strftime('%H:%M:%S', time.gmtime(sec))
-                img_path = os.path.join(self.temp_dir, f"frame_{sec}.jpg")
+                # 既に同じ時間のフレームが存在する場合はスキップ
+                if sec not in frame_dict:
+                    timestamp = time.strftime('%H:%M:%S', time.gmtime(sec))
+                    img_path = os.path.join(self.temp_dir, f"frame_{sec}.jpg")
+                    
+                    # 高画質パラメータを設定
+                    img_params = [cv2.IMWRITE_JPEG_QUALITY, self.image_quality]
+                    cv2.imwrite(img_path, frame, img_params)
+                    
+                    # テキスト取得
+                    text = self._get_transcript_at_time(transcript, sec, window_size=15)
+                    
+                    # フレーム情報を辞書に追加
+                    frame_dict[sec] = (img_path, text)
                 
-                # 高画質パラメータを設定
-                img_params = [cv2.IMWRITE_JPEG_QUALITY, self.image_quality]
-                cv2.imwrite(img_path, frame, img_params)
-                
-                frames.append(img_path)
-                frame_times.append(sec)
-                
-                # テキスト取得とテキスト量に基づく分割処理
-                text = self._get_transcript_at_time(transcript, sec, window_size=15)
-                transcript_chunks.append(text)
-                
-                # 定期的にテキスト量をチェックし、閾値を超えた時点で追加のフレームを取得
+                # テキスト量に基づく分割処理
                 current_time = sec
-                if transcript and text and len(text) > self.max_text_length:
+                
+                # frame_dictから現在の時間に対応するテキストを取得
+                current_text = frame_dict.get(sec, (None, ""))[1]
+                
+                if transcript and current_text and len(current_text) > self.max_text_length:
                     # テキスト量が多い場合、セグメントを分割して追加のフレームを作成
                     segments = self._split_text_by_amount(
                         transcript, current_time, current_time + self.interval)
                     
                     for seg_time in segments[1:]:  # 最初のセグメントは既に追加済み
+                        # セグメント時間が既に存在する場合はスキップ
+                        if seg_time in frame_dict:
+                            continue
+                            
                         # フレームを取得
                         cap.set(cv2.CAP_PROP_POS_MSEC, seg_time * 1000)
                         ret, seg_frame = cap.read()
@@ -466,16 +473,12 @@ class EnhancedYouTubeTutorialExtractor:
                             img_params = [cv2.IMWRITE_JPEG_QUALITY, self.image_quality]
                             cv2.imwrite(img_path, seg_frame, img_params)
                             
-                            # フレーム情報を追加
-                            frames.append(img_path)
-                            frame_times.append(seg_time)
-                            
                             # テキスト取得
                             seg_text = self._get_transcript_at_time(
                                 transcript, seg_time, window_size=15)
-                            transcript_chunks.append(seg_text)
                             
-                            # デバッグ出力
+                            # フレーム情報を辞書に追加
+                            frame_dict[seg_time] = (img_path, seg_text)
                             print(f"テキスト量による分割: {seg_time}秒")
                 
                 # 現在のフレームを保存
@@ -483,11 +486,17 @@ class EnhancedYouTubeTutorialExtractor:
             
             cap.release()
             
-            # フレーム時間に基づいてソート
-            sorted_data = sorted(zip(frames, frame_times, transcript_chunks), key=lambda x: x[1])
-            frames = [item[0] for item in sorted_data]
-            frame_times = [item[1] for item in sorted_data]
-            transcript_chunks = [item[2] for item in sorted_data]
+            # 辞書から時間でソートされたリストを作成
+            sorted_times = sorted(frame_dict.keys())
+            frames = []
+            frame_times = []
+            transcript_chunks = []
+            
+            for t in sorted_times:
+                img_path, text = frame_dict[t]
+                frames.append(img_path)
+                frame_times.append(t)
+                transcript_chunks.append(text)
             
             print(f"合計 {len(frames)} フレームを抽出しました")
             return frames, frame_times, transcript_chunks
@@ -497,7 +506,7 @@ class EnhancedYouTubeTutorialExtractor:
             import traceback
             traceback.print_exc()  # スタックトレースを表示
             return [], [], []
-    
+
     def _split_text_by_amount(self, transcript, start_time, end_time):
         """指定時間範囲内の字幕を文字量に基づいて分割し、分割点の時間を返す。
 
