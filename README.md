@@ -75,7 +75,7 @@ python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID"
 
 利用可能なオプション：
 ```
-usage: youtube_tutorial_slides.py [-h] [--output OUTPUT] [--format {pptx,slides}] [--interval INTERVAL] [--lang LANG] [--nocompact] [--text-threshold TEXT_THRESHOLD] [--change-threshold CHANGE_THRESHOLD] [--disable-text-split] [--disable-change-detection] [--use-whisper] [--whisper-api-key WHISPER_API_KEY] [--whisper-model {tiny,base,small,medium,large-v1,large-v2,large-v3}] [--force-whisper] url
+usage: youtube_tutorial_slides.py [-h] [--output OUTPUT] [--format {pptx,slides}] [--interval INTERVAL] [--lang LANG] [--nocompact] [--text-threshold TEXT_THRESHOLD] [--change-threshold CHANGE_THRESHOLD] [--disable-text-split] [--disable-change-detection] [--use-whisper] [--whisper-api-key WHISPER_API_KEY] [--whisper-model {tiny,base,small,medium,large-v1,large-v2,large-v3}] [--no-force-whisper] url
 
 YouTube チュートリアル動画からGoogleSlides用スライドを生成（拡張版）
 
@@ -104,12 +104,12 @@ optional arguments:
   --video-quality {best,high,medium,low}, -vq {best,high,medium,low}
                                 動画ダウンロード品質 (best=最高品質, high=高品質1080p, 
                                 medium=中品質720p, low=低品質480p。デフォルト: high)
-  --use-whisper                 Whisper APIを使用して高精度な音声認識を行う
+  --use-whisper                 Whisper APIを使用して高精度な音声認識を行う（デフォルトで字幕優先使用）
   --whisper-api-key WHISPER_API_KEY
                                 Whisper API（OpenAI API）のキー。環境変数 OPENAI_API_KEY からも取得可能
   --whisper-model {tiny,base,small,medium,large-v1,large-v2,large-v3}
                                 使用するWhisperモデル（注: 現在のOpenAI APIではすべて内部的に同じモデルを使用）
-  --force-whisper               品質評価に関係なく、常にWhisper APIの字幕を優先して使用する
+  --no-force-whisper            Whisper API使用時に品質比較を行い、必ずしもWhisper APIの結果を優先しない
 ```
 
 ### バッチファイル（Windows）
@@ -153,14 +153,14 @@ Windowsユーザーの場合、同梱の `enhanced_run_slides_tool.bat` をダ�
    python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --video-quality best
    ```
 
-8. Whisper APIを使用して高精度な音声認識を行う場合：
+8. Whisper APIを使用して高精度な音声認識を行う場合（デフォルトでWhisper結果優先）：
    ```
    python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY"
    ```
 
-9. Whisper APIの結果を常に優先する場合：
+9. Whisper APIを使用するが、品質比較を行う場合：
    ```
-   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY" --force-whisper
+   python youtube_tutorial_slides.py "https://www.youtube.com/watch?v=VIDEO_ID" --use-whisper --whisper-api-key "YOUR_API_KEY" --no-force-whisper
    ```
 
 ## GoogleSlidesでの使用方法
@@ -175,7 +175,8 @@ Windowsユーザーの場合、同梱の `enhanced_run_slides_tool.bat` をダ�
 1. **APIキーの入手**: OpenAIのアカウントを作成し、APIキーを取得してください。
 2. **コスト管理**: Whisper APIは使用量に応じて課金されます。特に長い動画では注意が必要です。
 3. **モデル選択**: 現在のOpenAI APIでは、APIリクエスト時にはすべてのモデルサイズが内部的に同じエンドポイントを使用します。
-4. **優先モード**: `--force-whisper`オプションを使用すると、品質評価に関わらず常にWhisper APIの結果を使用します。
+4. **字幕優先使用**: `--use-whisper` オプションを使用すると、デフォルトで常にWhisper APIの結果を優先使用します。
+5. **品質比較モード**: `--no-force-whisper` オプションを追加すると、YouTube字幕とWhisper字幕の品質を比較して良い方を選択します。
 
 ## トラブルシューティング
 

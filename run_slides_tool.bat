@@ -50,7 +50,8 @@ echo 高精度な音声認識のためにWhisper APIを使用しますか? (Y/N)
 set /p whisper_choice=選択: 
 echo.
 
-set force_whisper_param=
+set whisper_param=
+set no_force_whisper_param=
 if /i "%whisper_choice%"=="Y" (
     echo OpenAI API Key を入力してください:
     set /p whisper_api_key=API Key: 
@@ -65,11 +66,12 @@ if /i "%whisper_choice%"=="Y" (
     echo 7: large-v3 (最新)
     set /p whisper_model_choice=選択 (1-7): 
     echo.
-    echo YouTubeの字幕より常にWhisper APIの結果を優先しますか？ (Y/N) (デフォルト: N):
-    set /p force_whisper_choice=選択: 
+    echo 字幕の品質を比較してYouTubeの字幕が良い場合はそちらを使用しますか？ (Y/N) (デフォルト: N):
+    echo (※Nを選択すると、常にWhisper APIの結果を優先使用します)
+    set /p compare_quality_choice=選択: 
     
-    if /i "%force_whisper_choice%"=="Y" (
-        set force_whisper_param=--force-whisper
+    if /i "%compare_quality_choice%"=="Y" (
+        set no_force_whisper_param=--no-force-whisper
     )
     
     set whisper_model=medium
@@ -80,6 +82,8 @@ if /i "%whisper_choice%"=="Y" (
     if "%whisper_model_choice%"=="5" set whisper_model=large-v1
     if "%whisper_model_choice%"=="6" set whisper_model=large-v2
     if "%whisper_model_choice%"=="7" set whisper_model=large-v3
+    
+    set whisper_param=--use-whisper --whisper-api-key "%whisper_api_key%" --whisper-model %whisper_model% %no_force_whisper_param%
 )
 
 if "%image_quality%"=="" set image_quality=95
@@ -97,14 +101,9 @@ if /i "%text_split_choice%"=="N" set text_split_param=--disable-text-split
 set change_detect_param=
 if /i "%change_detect_choice%"=="N" set change_detect_param=--disable-change-detection
 
-set whisper_param=
-if /i "%whisper_choice%"=="Y" (
-    set whisper_param=--use-whisper --whisper-api-key "%whisper_api_key%" --whisper-model %whisper_model% %force_whisper_param%
-)
-
 echo.
 echo 処理を開始します...
-python enhanced_youtube_slides.py "%youtube_url%" --interval %interval% --lang %lang% %compact_param% --text-threshold %text_threshold% %text_split_param% --change-threshold %change_threshold% %change_detect_param% --image-quality %image_quality% --video-quality %video_quality% %whisper_param%
+python youtube_tutorial_slides.py "%youtube_url%" --interval %interval% --lang %lang% %compact_param% --text-threshold %text_threshold% %text_split_param% --change-threshold %change_threshold% %change_detect_param% --image-quality %image_quality% --video-quality %video_quality% %whisper_param%
 echo.
 echo 処理が完了しました！
 echo 任意のキーを押して終了...

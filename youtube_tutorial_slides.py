@@ -49,7 +49,7 @@ def main():
     # Whisper API 関連のパラメータ
     parser.add_argument(
         "--use-whisper", action="store_true",
-        help="Whisper APIを使用して高精度な音声認識を行う")
+        help="Whisper APIを使用して高精度な音声認識を行う (デフォルトで字幕優先モードになります)")
     parser.add_argument(
         "--whisper-api-key", 
         help="Whisper API（OpenAI API）のキー。環境変数 OPENAI_API_KEY からも取得可能")
@@ -59,8 +59,8 @@ def main():
         default="medium",
         help="使用するWhisperモデル（注: 現在のOpenAI APIではすべて内部的に同じモデルを使用します）")
     parser.add_argument(
-        "--force-whisper", action="store_true",
-        help="品質評価に関係なく、常にWhisper APIの字幕を優先して使用します")
+        "--no-force-whisper", action="store_true",
+        help="Whisper API使用時に品質比較を行い、必ずしもWhisper APIの結果を優先しないようにする")
     
     args = parser.parse_args()
     
@@ -88,7 +88,9 @@ def main():
             print("--whisper-api-key オプションまたは環境変数 OPENAI_API_KEY を設定してください。")
             print("Whisper APIを使用せずに処理を続行します。")
             args.use_whisper = False
-            args.force_whisper = False
+    
+    # デフォルトで force_whisper を有効に（--no-force-whisper が指定されていない場合）
+    force_whisper = args.use_whisper and not args.no_force_whisper
     
     extractor = EnhancedYouTubeTutorialExtractor(
         url=args.url,
@@ -105,7 +107,7 @@ def main():
         use_whisper=args.use_whisper,
         whisper_api_key=whisper_api_key,
         whisper_model=args.whisper_model,
-        force_whisper=args.force_whisper
+        force_whisper=force_whisper
     )
     
     result_path = extractor.process()
