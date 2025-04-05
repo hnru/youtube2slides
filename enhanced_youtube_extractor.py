@@ -364,17 +364,69 @@ class EnhancedYouTubeTutorialExtractor:
             print("動画をダウンロード中...")
             video_path = os.path.join(self.temp_dir, f"{self.video_id}.mp4")
             
-            # yt-dlpの設定オプション（最高品質を指定）
+            # yt-dlpの設定オプション（よりロバストな設定）
             ydl_opts = {
-                'format': self.video_format,
+                'format': 'best',  # デフォルトはbestフォーマット
                 'outtmpl': video_path,
                 'quiet': True,
                 'no_warnings': True,
             }
             
-            # yt-dlpを使って動画をダウンロード
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([self.url])
+            # 動画のダウンロードを試みる（複数の方法で）
+            success = False
+            
+            # 1. 指定されたフォーマットでダウンロードを試みる
+            if self.video_format != 'best':
+                try:
+                    format_opts = ydl_opts.copy()
+                    format_opts['format'] = self.video_format
+                    with yt_dlp.YoutubeDL(format_opts) as ydl:
+                        ydl.download([self.url])
+                        success = os.path.exists(video_path)
+                        if success:
+                            print("指定されたフォーマットでダウンロードしました")
+                except Exception as e:
+                    print(f"指定フォーマットでのダウンロードに失敗しました: {e}")
+            
+            # 2. 'best' フォーマットでのダウンロードを試みる
+            if not success:
+                try:
+                    print("利用可能な最高品質のフォーマットを使用します...")
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([self.url])
+                        success = os.path.exists(video_path)
+                        if success:
+                            print("最高品質フォーマットでダウンロードしました")
+                except Exception as e:
+                    print(f"最高品質フォーマットでのダウンロードに失敗しました: {e}")
+            
+            # 3. フォーマット指定をさらに緩和してダウンロードを試みる
+            if not success:
+                try:
+                    print("一般的なフォーマットでダウンロードを試みます...")
+                    alt_opts = ydl_opts.copy()
+                    alt_opts['format'] = 'mp4'
+                    with yt_dlp.YoutubeDL(alt_opts) as ydl:
+                        ydl.download([self.url])
+                        success = os.path.exists(video_path)
+                        if success:
+                            print("mp4フォーマットでダウンロードしました")
+                except Exception as e:
+                    print(f"mp4フォーマットでのダウンロードに失敗しました: {e}")
+            
+            # 4. より簡素なフォーマット指定での最終試行
+            if not success:
+                try:
+                    print("最終試行: シンプルなフォーマットでダウンロードします...")
+                    last_opts = ydl_opts.copy()
+                    last_opts['format'] = 'worstvideo+worstaudio/worst'
+                    with yt_dlp.YoutubeDL(last_opts) as ydl:
+                        ydl.download([self.url])
+                        success = os.path.exists(video_path)
+                        if success:
+                            print("最低品質フォーマットでダウンロードしました")
+                except Exception as e:
+                    print(f"最終試行でのダウンロードにも失敗しました: {e}")
             
             if not os.path.exists(video_path):
                 raise Exception("動画のダウンロードに失敗しました")
